@@ -1,20 +1,22 @@
 use chrono::NaiveDate;
+use csv::Writer;
 use scraper::{Html, Selector};
+use std::error::Error;
 
 struct ComedySpecial {
-    date: String,
+    date: NaiveDate,
     details: String,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Get HTML from URL
     let url = "https://en.wikipedia.org/wiki/2023_in_stand-up_comedy";
-    let response = reqwest::blocking::get(url).expect("Could not load url.");
-    let html = response.text().unwrap();
+    let response = reqwest::blocking::get(url)?;
+    let html = response.text()?;
 
     // Get all <li>
     let document = Html::parse_document(&html);
-    let selector = Selector::parse("li").unwrap();
+    let selector = Selector::parse("li")?;
 
     let mut comedy_specials: Vec<ComedySpecial> = Vec::new();
 
@@ -29,13 +31,18 @@ fn main() {
         }
     }
 
-    // Print comedy Specials
-    for special in comedy_specials {
-        let date = parse_date(&special.date);
-        let details = special.details;
+    // Save to csv
+    let mut writer = Writer::from_path("specials.csv")?;
 
-        println!("{}, {}", date, details)
+    writer.write_record(["Date", "Details"])?;
+
+    for special in comedy_specials {
+        writer.write_record(&[special.date.to_string(), special.details])?;
     }
+
+    println!("Data written to \"specials.csv\"");
+
+    Ok(())
 }
 
 fn is_month(word: &str) -> bool {
@@ -69,7 +76,7 @@ fn clean_text(text: &str) -> String {
 
 fn parse_special(text: &str) -> ComedySpecial {
     let parts: Vec<&str> = text.split(':').collect();
-    let date = parts[0].to_string();
+    let date = parse_date(parts[0]);
     let details = clean_text(parts[1]);
 
     ComedySpecial { date, details }
@@ -80,8 +87,8 @@ fn parse_date(text: &str) -> NaiveDate {
     let month_str = parts[0].to_string();
     let month = parse_month(&month_str);
     let day = parts[1].parse::<u32>().unwrap();
-    
-    NaiveDate::from_ymd_opt(2023, month, day).unwrap()
+
+    NaiveDate::from_ymd_opt(2023, month, day).expect("Unable to convert date")
 }
 
 fn parse_month(month_str: &str) -> u32 {
